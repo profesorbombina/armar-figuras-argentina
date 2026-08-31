@@ -1,4 +1,5 @@
 const SESSION_KEY = "armarFigurasArgentinaUltimaSesion";
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 const elements = {
   setupPanel: document.querySelector("#setupPanel"),
@@ -44,7 +45,7 @@ const state = {
   attempts: 0,
   checksBeforeComplete: 0,
   completedAt: null,
-  layout: null
+  puzzle: null
 };
 
 let audioContext = null;
@@ -54,20 +55,20 @@ function getDifficulty(pieceCount) {
   if (pieceCount <= 4) {
     return {
       name: "Facil",
-      hint: "De 1 a 4 fichas para armar."
+      hint: "De 1 a 4 piezas para armar."
     };
   }
 
   if (pieceCount <= 10) {
     return {
       name: "Intermedio",
-      hint: "De 5 a 10 fichas para armar."
+      hint: "De 5 a 10 piezas para armar."
     };
   }
 
   return {
     name: "Avanzado",
-    hint: "Mas de 10 fichas u objetos para armar."
+    hint: "Mas de 10 piezas u objetos para armar."
   };
 }
 
@@ -123,7 +124,7 @@ function readSettings(form) {
     pieceCount,
     durationSeconds,
     level: getDifficulty(pieceCount).name,
-    layout: createLayout(shapeType, pieceCount)
+    puzzle: createPuzzle(shapeType, pieceCount)
   };
 }
 
@@ -132,53 +133,210 @@ function setSetupHint(message, isError = false) {
   elements.setupHint.classList.toggle("is-error", isError);
 }
 
-function createLayout(shapeType, pieceCount) {
-  const size = pieceCount > 10 ? 5 : pieceCount > 4 ? 4 : 3;
-  const allCells = [];
+function createPuzzle(shapeType, pieceCount) {
+  const size = pieceCount > 10 ? 7 : pieceCount > 4 ? 6 : 4;
+  const cells = createShapeCells(shapeType, size);
+  const pieces = partitionCells(cells, pieceCount, size).map((pieceCells, index) => createPiece(pieceCells, index));
+
+  return {
+    shapeType,
+    size,
+    cells,
+    pieces
+  };
+}
+
+function createShapeCells(shapeType, size) {
+  const cells = [];
+  const center = (size - 1) / 2;
 
   for (let row = 0; row < size; row += 1) {
     for (let col = 0; col < size; col += 1) {
-      if (isCellInsideShape(shapeType, row, col, size)) {
-        allCells.push({ row, col });
+      const cellCenterX = col + 0.5;
+      const cellCenterY = row + 0.5;
+
+      if (shapeType === "cuadrado") {
+        cells.push({ row, col });
+        continue;
+      }
+
+      if (shapeType === "triangulo") {
+        const rowProgress = (row + 0.5) / size;
+        const halfWidth = Math.max(0.55, rowProgress * size * 0.52);
+        if (Math.abs(cellCenterX - (center + 0.5)) <= halfWidth) {
+          cells.push({ row, col });
+        }
+        continue;
+      }
+
+      const diamondRadius = size / 2;
+      if (Math.abs(cellCenterX - (center + 0.5)) + Math.abs(cellCenterY - (center + 0.5)) <= diamondRadius) {
+        cells.push({ row, col });
       }
     }
   }
 
-  const center = (size - 1) / 2;
-  const selectedCells = allCells
-    .sort((first, second) => {
-      const firstDistance = Math.abs(first.row - center) + Math.abs(first.col - center);
-      const secondDistance = Math.abs(second.row - center) + Math.abs(second.col - center);
-      return firstDistance - secondDistance || first.row - second.row || first.col - second.col;
-    })
-    .slice(0, pieceCount)
-    .sort((first, second) => first.row - second.row || first.col - second.col);
-
-  return {
-    cols: size,
-    rows: size,
-    cells: selectedCells.map((cell, index) => ({
-      ...cell,
-      id: `pieza-${index + 1}`,
-      label: index + 1
-    }))
-  };
+  return cells;
 }
 
-function isCellInsideShape(shapeType, row, col, size) {
-  if (shapeType === "cuadrado") {
-    return true;
+function partitionCells(cells, pieceCount, size) {
+  const safePieceCount = Math.min(pieceCount, cells.length);
+  const sortedCells = [...cells].sort((first, second) => first.row - second.row || first.col - second.col);
+  const targetSizes = getTargetPieceSizes(sortedCells.length, safePieceCount);
+  const pieces = Array.from({ length: safePieceCount }, () => []);
+  const assigned = new Set();
+  const seeds = chooseSeeds(sortedCells, safePieceCount, size);
+
+  seeds.forEach((seed, index) => {
+    pieces[index].push(seed);
+    assigned.add(cellKey(seed));
+  });
+
+  let changed = true;
+  while (assigned.size < sortedCells.length && changed) {
+    changed = false;
+
+    for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
+      if (pieces[pieceIndex].length >= targetSizes[pieceIndex]) {
+        continue;
+      }
+
+      const nextCell = findNeighborCell(pieces[pieceIndex], sortedCells, assigned);
+      if (nextCell) {
+        pieces[pieceIndex].push(nextCell);
+        assigned.add(cellKey(nextCell));
+        changed = true;
+      }
+    }
   }
 
-  if (shapeType === "triangulo") {
-    const center = (size - 1) / 2;
-    const widthAtRow = row + 1;
-    return Math.abs(col - center) <= widthAtRow / 2;
-  }
+  sortedCells.forEach((cell) => {
+    if (assigned.has(cellKey(cell))) {
+      return;
+    }
 
-  const center = (size - 1) / 2;
-  const radius = size <= 3 ? 1.5 : size <= 4 ? 2 : 2.45;
-  return Math.abs(row - center) + Math.abs(col - center) <= radius;
+    const nearestIndex = findNearestPieceIndex(cell, pieces);
+    pieces[nearestIndex].push(cell);
+    assigned.add(cellKey(cell));
+  });
+
+  return pieces.map((piece) => piece.sort((first, second) => first.row - second.row || first.col - second.col));
+}
+
+function getTargetPieceSizes(cellCount, pieceCount) {
+  const baseSize = Math.floor(cellCount / pieceCount);
+  let remainder = cellCount % pieceCount;
+  return Array.from({ length: pieceCount }, () => {
+    const size = baseSize + (remainder > 0 ? 1 : 0);
+    remainder -= 1;
+    return size;
+  });
+}
+
+function chooseSeeds(cells, pieceCount, size) {
+  const anchors = [
+    { row: 0, col: Math.floor(size / 2) },
+    { row: Math.floor(size / 2), col: size - 1 },
+    { row: size - 1, col: Math.floor(size / 2) },
+    { row: Math.floor(size / 2), col: 0 },
+    { row: 1, col: 1 },
+    { row: 1, col: size - 2 },
+    { row: size - 2, col: 1 },
+    { row: size - 2, col: size - 2 },
+    { row: Math.floor(size / 2), col: Math.floor(size / 2) },
+    { row: 0, col: 0 },
+    { row: 0, col: size - 1 },
+    { row: size - 1, col: 0 },
+    { row: size - 1, col: size - 1 },
+    { row: 2, col: Math.floor(size / 2) },
+    { row: size - 3, col: Math.floor(size / 2) },
+    { row: Math.floor(size / 2), col: 2 }
+  ];
+  const selected = [];
+  const used = new Set();
+
+  anchors.forEach((anchor) => {
+    if (selected.length >= pieceCount) {
+      return;
+    }
+
+    const nearest = findNearestCell(anchor, cells, used);
+    if (nearest) {
+      selected.push(nearest);
+      used.add(cellKey(nearest));
+    }
+  });
+
+  cells.forEach((cell) => {
+    if (selected.length < pieceCount && !used.has(cellKey(cell))) {
+      selected.push(cell);
+      used.add(cellKey(cell));
+    }
+  });
+
+  return selected;
+}
+
+function findNearestCell(anchor, cells, used) {
+  return [...cells]
+    .filter((cell) => !used.has(cellKey(cell)))
+    .sort((first, second) => {
+      const firstDistance = Math.abs(first.row - anchor.row) + Math.abs(first.col - anchor.col);
+      const secondDistance = Math.abs(second.row - anchor.row) + Math.abs(second.col - anchor.col);
+      return firstDistance - secondDistance || first.row - second.row || first.col - second.col;
+    })[0];
+}
+
+function findNeighborCell(piece, cells, assigned) {
+  const pieceKeys = new Set(piece.map(cellKey));
+  return cells.find((cell) => {
+    if (assigned.has(cellKey(cell))) {
+      return false;
+    }
+
+    return getNeighbors(cell).some((neighbor) => pieceKeys.has(cellKey(neighbor)));
+  });
+}
+
+function getNeighbors(cell) {
+  return [
+    { row: cell.row - 1, col: cell.col },
+    { row: cell.row + 1, col: cell.col },
+    { row: cell.row, col: cell.col - 1 },
+    { row: cell.row, col: cell.col + 1 }
+  ];
+}
+
+function findNearestPieceIndex(cell, pieces) {
+  return pieces
+    .map((piece, index) => ({
+      index,
+      distance: Math.min(...piece.map((pieceCell) => Math.abs(pieceCell.row - cell.row) + Math.abs(pieceCell.col - cell.col)))
+    }))
+    .sort((first, second) => first.distance - second.distance || first.index - second.index)[0].index;
+}
+
+function cellKey(cell) {
+  return `${cell.row}-${cell.col}`;
+}
+
+function createPiece(cells, index) {
+  const minRow = Math.min(...cells.map((cell) => cell.row));
+  const maxRow = Math.max(...cells.map((cell) => cell.row));
+  const minCol = Math.min(...cells.map((cell) => cell.col));
+  const maxCol = Math.max(...cells.map((cell) => cell.col));
+
+  return {
+    id: `pieza-${index + 1}`,
+    label: index + 1,
+    cells,
+    minRow,
+    maxRow,
+    minCol,
+    maxCol,
+    width: maxCol - minCol + 1,
+    height: maxRow - minRow + 1
+  };
 }
 
 function shuffle(items) {
@@ -210,7 +368,7 @@ function resetActivity(settings = {}) {
     attempts: 0,
     checksBeforeComplete: 0,
     completedAt: null,
-    layout: settings.layout || createLayout("rombo", 7)
+    puzzle: settings.puzzle || createPuzzle("rombo", 7)
   });
 }
 
@@ -235,42 +393,36 @@ function renderActivity() {
   elements.shapeText.textContent = normalizeShapeName(state.shapeType);
   elements.attemptText.textContent = `${state.attempts}`;
   elements.timerText.textContent = formatTime(getRemainingSeconds());
-  elements.roundLabel.textContent = `${normalizeShapeName(state.shapeType)} con ${state.pieceCount} fichas`;
-  elements.objectiveText.textContent = "Ubica cada ficha en el numero correspondiente.";
+  elements.roundLabel.textContent = `${normalizeShapeName(state.shapeType)} con ${state.pieceCount} piezas`;
+  elements.objectiveText.textContent = "Encastra cada pieza en el hueco que completa la figura.";
   renderBoard();
 }
 
 function renderBoard() {
   elements.tileBank.innerHTML = "";
   elements.shapeBoard.innerHTML = "";
-  elements.shapeBoard.style.setProperty("--board-cols", state.layout.cols);
-  elements.shapeBoard.style.setProperty("--board-rows", state.layout.rows);
   elements.shapeBoard.dataset.shape = state.shapeType;
+  elements.shapeBoard.style.setProperty("--puzzle-size", state.puzzle.size);
 
-  const activeCellMap = new Map(state.layout.cells.map((cell) => [`${cell.row}-${cell.col}`, cell]));
+  elements.shapeBoard.appendChild(createSilhouetteSvg());
 
-  for (let row = 0; row < state.layout.rows; row += 1) {
-    for (let col = 0; col < state.layout.cols; col += 1) {
-      const cell = activeCellMap.get(`${row}-${col}`);
-      const slot = document.createElement("div");
-      slot.className = cell ? "slot" : "slot is-empty-space";
-      slot.style.gridColumn = `${col + 1}`;
-      slot.style.gridRow = `${row + 1}`;
+  state.puzzle.pieces.forEach((piece) => {
+    const slot = document.createElement("div");
+    slot.className = "piece-slot";
+    slot.dataset.expectedId = piece.id;
+    slot.style.left = `${(piece.minCol / state.puzzle.size) * 100}%`;
+    slot.style.top = `${(piece.minRow / state.puzzle.size) * 100}%`;
+    slot.style.width = `${(piece.width / state.puzzle.size) * 100}%`;
+    slot.style.height = `${(piece.height / state.puzzle.size) * 100}%`;
+    slot.appendChild(createPieceSvg(piece, "slot"));
+    slot.addEventListener("dragover", handleDragOver);
+    slot.addEventListener("dragleave", handleDragLeave);
+    slot.addEventListener("drop", handleDrop);
+    elements.shapeBoard.appendChild(slot);
+  });
 
-      if (cell) {
-        slot.dataset.expectedId = cell.id;
-        slot.textContent = cell.label;
-        slot.addEventListener("dragover", handleDragOver);
-        slot.addEventListener("dragleave", handleDragLeave);
-        slot.addEventListener("drop", handleDrop);
-      }
-
-      elements.shapeBoard.appendChild(slot);
-    }
-  }
-
-  shuffle(state.layout.cells).forEach((cell) => {
-    elements.tileBank.appendChild(createTile(cell));
+  shuffle(state.puzzle.pieces).forEach((piece) => {
+    elements.tileBank.appendChild(createPieceTile(piece));
   });
 
   elements.tileBank.addEventListener("dragover", handleDragOver);
@@ -278,20 +430,117 @@ function renderBoard() {
   elements.tileBank.addEventListener("drop", handleDrop);
 }
 
-function createTile(cell) {
+function createSilhouetteSvg() {
+  const size = state.puzzle.size;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "silhouette-svg");
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("aria-hidden", "true");
+
+  const defs = document.createElementNS(SVG_NS, "defs");
+  const pattern = document.createElementNS(SVG_NS, "pattern");
+  pattern.setAttribute("id", `gridPattern-${state.shapeType}-${size}`);
+  pattern.setAttribute("width", "1");
+  pattern.setAttribute("height", "1");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", "M 1 0 L 0 0 0 1");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "#d5dde6");
+  path.setAttribute("stroke-width", "0.035");
+  pattern.appendChild(path);
+  defs.appendChild(pattern);
+  svg.appendChild(defs);
+
+  const polygon = document.createElementNS(SVG_NS, "polygon");
+  polygon.setAttribute("points", getOutlinePoints(state.shapeType, size));
+  polygon.setAttribute("fill", `url(#gridPattern-${state.shapeType}-${size})`);
+  polygon.setAttribute("stroke", "#1d1d1f");
+  polygon.setAttribute("stroke-width", "0.12");
+  polygon.setAttribute("vector-effect", "non-scaling-stroke");
+  svg.appendChild(polygon);
+
+  return svg;
+}
+
+function getOutlinePoints(shapeType, size) {
+  if (shapeType === "cuadrado") {
+    return `0.08,0.08 ${size - 0.08},0.08 ${size - 0.08},${size - 0.08} 0.08,${size - 0.08}`;
+  }
+
+  if (shapeType === "triangulo") {
+    return `${size / 2},0.08 ${size - 0.08},${size - 0.08} 0.08,${size - 0.08}`;
+  }
+
+  return `${size / 2},0.08 ${size - 0.08},${size / 2} ${size / 2},${size - 0.08} 0.08,${size / 2}`;
+}
+
+function createPieceTile(piece) {
   const tile = document.createElement("button");
-  tile.className = "tile";
+  tile.className = "puzzle-piece";
   tile.type = "button";
   tile.draggable = false;
-  tile.textContent = cell.label;
-  tile.id = `${cell.id}-${crypto.randomUUID()}`;
-  tile.dataset.pieceId = cell.id;
-  tile.setAttribute("aria-label", `Ficha ${cell.label}`);
+  tile.dataset.pieceId = piece.id;
+  tile.id = `${piece.id}-${crypto.randomUUID()}`;
+  tile.style.setProperty("--piece-cols", piece.width);
+  tile.style.setProperty("--piece-rows", piece.height);
+  tile.setAttribute("aria-label", `Pieza ${piece.label}`);
+  tile.appendChild(createPieceSvg(piece, "tile"));
   tile.addEventListener("pointerdown", startPointerDrag);
   tile.addEventListener("pointermove", movePointerDrag);
   tile.addEventListener("pointerup", endPointerDrag);
   tile.addEventListener("pointercancel", cancelPointerDrag);
   return tile;
+}
+
+function createPieceSvg(piece, mode) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", `piece-svg piece-svg-${mode}`);
+  svg.setAttribute("viewBox", `0 0 ${piece.width} ${piece.height}`);
+  svg.setAttribute("aria-hidden", "true");
+
+  piece.cells.forEach((cell) => {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(cell.col - piece.minCol));
+    rect.setAttribute("y", String(cell.row - piece.minRow));
+    rect.setAttribute("width", "1");
+    rect.setAttribute("height", "1");
+    rect.setAttribute("rx", "0.02");
+    rect.setAttribute("class", "piece-cell");
+    svg.appendChild(rect);
+  });
+
+  const outline = document.createElementNS(SVG_NS, "path");
+  outline.setAttribute("d", buildPieceOutline(piece));
+  outline.setAttribute("class", "piece-outline");
+  svg.appendChild(outline);
+
+  return svg;
+}
+
+function buildPieceOutline(piece) {
+  const edges = [];
+  const cellKeys = new Set(piece.cells.map(cellKey));
+
+  piece.cells.forEach((cell) => {
+    const x = cell.col - piece.minCol;
+    const y = cell.row - piece.minRow;
+    if (!cellKeys.has(`${cell.row - 1}-${cell.col}`)) {
+      edges.push(`M ${x} ${y} L ${x + 1} ${y}`);
+    }
+    if (!cellKeys.has(`${cell.row}-${cell.col + 1}`)) {
+      edges.push(`M ${x + 1} ${y} L ${x + 1} ${y + 1}`);
+    }
+    if (!cellKeys.has(`${cell.row + 1}-${cell.col}`)) {
+      edges.push(`M ${x + 1} ${y + 1} L ${x} ${y + 1}`);
+    }
+    if (!cellKeys.has(`${cell.row}-${cell.col - 1}`)) {
+      edges.push(`M ${x} ${y + 1} L ${x} ${y}`);
+    }
+  });
+
+  return edges.join(" ");
 }
 
 function startPointerDrag(event) {
@@ -357,7 +606,6 @@ function cancelPointerDrag(event) {
 
   resetPointerTile(pointerDrag.tile);
   pointerDrag = null;
-  refreshSlotLabels();
   clearHoveredSlots();
   removePointerListeners();
 }
@@ -385,7 +633,7 @@ function getDropTarget(clientX, clientY) {
   pointerDrag.tile.style.visibility = "hidden";
   const element = document.elementFromPoint(clientX, clientY);
   pointerDrag.tile.style.visibility = "";
-  return element ? element.closest(".slot:not(.is-empty-space), .tile-bank") : null;
+  return element ? element.closest(".piece-slot, .tile-bank") : null;
 }
 
 function resetPointerTile(tile) {
@@ -399,18 +647,18 @@ function resetPointerTile(tile) {
 function updateHoveredSlot(clientX, clientY) {
   clearHoveredSlots();
   const target = getDropTarget(clientX, clientY);
-  if (target && target.classList.contains("slot")) {
+  if (target && target.classList.contains("piece-slot")) {
     target.classList.add("is-hovered");
   }
 }
 
 function clearHoveredSlots() {
-  document.querySelectorAll(".slot.is-hovered").forEach((slot) => slot.classList.remove("is-hovered"));
+  document.querySelectorAll(".piece-slot.is-hovered").forEach((slot) => slot.classList.remove("is-hovered"));
 }
 
 function handleDragOver(event) {
   event.preventDefault();
-  if (event.currentTarget.classList.contains("slot")) {
+  if (event.currentTarget.classList.contains("piece-slot")) {
     event.currentTarget.classList.add("is-hovered");
   }
 }
@@ -431,46 +679,37 @@ function handleDrop(event) {
 
 function placeTile(tile, target) {
   if (!target) {
-    refreshSlotLabels();
     return;
   }
 
   target.classList.remove("is-hovered");
 
-  if (target.classList.contains("slot")) {
-    const oldTile = target.querySelector(".tile");
+  if (target.classList.contains("piece-slot")) {
+    const oldTile = target.querySelector(".puzzle-piece");
     if (oldTile) {
       elements.tileBank.appendChild(oldTile);
+      oldTile.classList.remove("is-placed");
     }
-    target.textContent = "";
+    tile.classList.add("is-placed");
     target.appendChild(tile);
     return;
   }
 
+  tile.classList.remove("is-placed");
   elements.tileBank.appendChild(tile);
-  refreshSlotLabels();
 }
 
 function clearSlots() {
-  [...elements.shapeBoard.querySelectorAll(".slot .tile")].forEach((tile) => {
+  [...elements.shapeBoard.querySelectorAll(".piece-slot .puzzle-piece")].forEach((tile) => {
+    tile.classList.remove("is-placed");
     elements.tileBank.appendChild(tile);
   });
-  refreshSlotLabels();
-  showActionFeedback("Figura limpia. Volve a ubicar las fichas.", false, true);
+  showActionFeedback("Figura limpia. Volve a encastrar las piezas.", false, true);
 }
 
-function refreshSlotLabels() {
-  [...elements.shapeBoard.querySelectorAll(".slot:not(.is-empty-space)")].forEach((slot) => {
-    if (!slot.querySelector(".tile")) {
-      const expectedCell = state.layout.cells.find((cell) => cell.id === slot.dataset.expectedId);
-      slot.textContent = expectedCell ? expectedCell.label : "";
-    }
-  });
-}
-
-function getPlacedTiles() {
-  return [...elements.shapeBoard.querySelectorAll(".slot:not(.is-empty-space)")].map((slot) => {
-    const tile = slot.querySelector(".tile");
+function getPlacedPieces() {
+  return [...elements.shapeBoard.querySelectorAll(".piece-slot")].map((slot) => {
+    const tile = slot.querySelector(".puzzle-piece");
     return {
       expectedId: slot.dataset.expectedId,
       pieceId: tile ? tile.dataset.pieceId : null
@@ -486,13 +725,13 @@ function checkCurrentFigure() {
   state.attempts += 1;
   elements.attemptText.textContent = `${state.attempts}`;
 
-  const placedTiles = getPlacedTiles();
-  const placedCount = placedTiles.filter((tile) => tile.pieceId).length;
-  const correctCount = placedTiles.filter((tile) => tile.pieceId && tile.pieceId === tile.expectedId).length;
+  const placedPieces = getPlacedPieces();
+  const placedCount = placedPieces.filter((piece) => piece.pieceId).length;
+  const correctCount = placedPieces.filter((piece) => piece.pieceId && piece.pieceId === piece.expectedId).length;
 
   if (correctCount === state.pieceCount) {
     state.completedAt = performance.now();
-    showActionFeedback("Figura completa. Muy bien.", true);
+    showActionFeedback("Figura completa. Todas las piezas encastran.", true);
     playSuccessSound();
     window.setTimeout(() => finishActivity("completed"), 650);
     return;
@@ -501,9 +740,9 @@ function checkCurrentFigure() {
   state.checksBeforeComplete += 1;
 
   if (placedCount < state.pieceCount) {
-    showActionFeedback(`Faltan ${state.pieceCount - placedCount} fichas por ubicar.`, false);
+    showActionFeedback(`Faltan ${state.pieceCount - placedCount} piezas por encastrar.`, false);
   } else {
-    showActionFeedback(`Hay ${correctCount} de ${state.pieceCount} fichas en su lugar.`, false);
+    showActionFeedback(`Hay ${correctCount} de ${state.pieceCount} piezas en el hueco correcto.`, false);
   }
 
   playErrorSound();
@@ -523,9 +762,9 @@ function finishActivity(reason) {
 }
 
 function calculateMetrics(reason) {
-  const placedTiles = getPlacedTiles();
-  const placedCount = placedTiles.filter((tile) => tile.pieceId).length;
-  const correctCount = placedTiles.filter((tile) => tile.pieceId && tile.pieceId === tile.expectedId).length;
+  const placedPieces = getPlacedPieces();
+  const placedCount = placedPieces.filter((piece) => piece.pieceId).length;
+  const correctCount = placedPieces.filter((piece) => piece.pieceId && piece.pieceId === piece.expectedId).length;
   const elapsedSeconds = Math.min(
     state.durationSeconds,
     Math.max(0, ((state.completedAt || performance.now()) - state.startedAt) / 1000)
@@ -561,9 +800,9 @@ function renderResults(metrics) {
     ["Participante", metrics.participantName],
     ["Figura", metrics.shapeName],
     ["Nivel", metrics.level],
-    ["Fichas configuradas", `${metrics.pieceCount}`],
-    ["Fichas ubicadas", `${metrics.placedCount}`],
-    ["Fichas correctas", `${metrics.correctCount}`],
+    ["Piezas configuradas", `${metrics.pieceCount}`],
+    ["Piezas ubicadas", `${metrics.placedCount}`],
+    ["Piezas correctas", `${metrics.correctCount}`],
     ["Pendientes", `${metrics.pending}`],
     ["Intentos de revision", `${metrics.attempts}`],
     ["Revisiones antes de completar", `${metrics.checksBeforeComplete}`],
@@ -634,7 +873,7 @@ function updateDifficultyPreview() {
   const difficulty = getDifficulty(pieceCount);
   elements.difficultyPreview.textContent = difficulty.name;
   elements.difficultyHint.textContent = difficulty.hint;
-  setSetupHint("Configura el tiempo, la figura y la cantidad de fichas.");
+  setSetupHint("Cada pieza sera un fragmento real de la figura seleccionada.");
 }
 
 function saveSession(metrics) {

@@ -330,96 +330,106 @@ button:active {
 }
 
 .shape-board {
-  --board-cols: 5;
-  --board-rows: 5;
-  --cell-size: min(15.2vw, 72px);
-  display: grid;
-  grid-template-columns: repeat(var(--board-cols), var(--cell-size));
-  grid-template-rows: repeat(var(--board-rows), var(--cell-size));
-  justify-content: center;
-  align-content: center;
-  gap: 4px;
-  min-height: calc(var(--cell-size) * var(--board-rows) + 32px);
-  border: 4px solid #1d1d1f;
-  background:
-    linear-gradient(rgba(40, 108, 148, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 108, 148, 0.12) 1px, transparent 1px),
-    rgba(255, 255, 255, 0.86);
-  background-size: var(--cell-size) var(--cell-size);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.58);
-}
-
-.shape-board[data-shape="rombo"] {
-  clip-path: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%);
-}
-
-.shape-board[data-shape="triangulo"] {
-  clip-path: polygon(50% 1%, 99% 99%, 1% 99%);
-}
-
-.shape-board[data-shape="cuadrado"] {
-  clip-path: inset(0 round 8px);
-}
-
-.slot {
-  display: grid;
-  place-items: center;
-  min-width: 0;
+  --puzzle-size: 6;
+  position: relative;
+  width: min(92vw, 440px);
+  aspect-ratio: 1;
   min-height: 0;
-  border: 2px dashed rgba(17, 22, 32, 0.28);
-  color: rgba(17, 22, 32, 0.34);
-  font-size: clamp(0.85rem, 3vw, 1.1rem);
-  font-weight: 900;
-  background: rgba(255, 255, 255, 0.68);
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: none;
 }
 
-.slot.is-empty-space {
-  visibility: hidden;
+.silhouette-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 10px 18px rgba(7, 21, 38, 0.14));
   pointer-events: none;
 }
 
-.slot.is-hovered {
-  border-color: var(--accent-strong);
-  box-shadow: 0 0 0 5px rgba(53, 174, 232, 0.18);
+.piece-slot {
+  position: absolute;
+  display: grid;
+  place-items: stretch;
+  border: 0;
+  color: transparent;
 }
 
-.tile {
+.piece-slot.is-hovered {
+  filter: drop-shadow(0 0 10px rgba(53, 174, 232, 0.58));
+}
+
+.puzzle-piece {
   display: grid;
-  place-items: center;
-  width: clamp(58px, 16vw, 78px);
-  min-height: clamp(50px, 13vw, 66px);
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  border-radius: 7px;
-  color: #ffffff;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 46%),
-    linear-gradient(135deg, var(--tile-blue) 0%, var(--tile-blue-dark) 100%);
-  box-shadow: 0 9px 18px rgba(7, 21, 38, 0.24), inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  place-items: stretch;
+  width: calc(clamp(46px, 11vw, 70px) * var(--piece-cols));
+  height: calc(clamp(46px, 11vw, 70px) * var(--piece-rows));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: grab;
-  font-size: clamp(1rem, 4vw, 1.32rem);
-  font-weight: 900;
-  text-align: center;
   touch-action: none;
   user-select: none;
+  filter: drop-shadow(0 10px 15px rgba(7, 21, 38, 0.22));
 }
 
-.slot .tile {
+.piece-slot .puzzle-piece {
   width: 100%;
-  min-height: 100%;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  height: 100%;
+  filter: none;
 }
 
-.tile:active {
+.puzzle-piece:active {
   cursor: grabbing;
 }
 
-.tile.is-pointer-dragging {
+.puzzle-piece.is-pointer-dragging {
   position: fixed;
   z-index: 20;
   pointer-events: none;
   opacity: 0.94;
   cursor: grabbing;
+}
+
+.piece-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.piece-svg-slot .piece-cell {
+  fill: rgba(255, 255, 255, 0.46);
+  stroke: rgba(17, 22, 32, 0.18);
+  stroke-width: 0.03;
+}
+
+.piece-svg-slot .piece-outline {
+  fill: none;
+  stroke: rgba(17, 22, 32, 0.32);
+  stroke-dasharray: 0.12 0.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0.08;
+}
+
+.piece-svg-tile .piece-cell {
+  fill: var(--tile-blue);
+  stroke: rgba(255, 255, 255, 0.26);
+  stroke-width: 0.03;
+}
+
+.piece-svg-tile .piece-outline {
+  fill: none;
+  stroke: var(--tile-blue-dark);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0.08;
 }
 
 .action-feedback {
@@ -515,7 +525,7 @@ button:active {
   }
 
   .shape-board {
-    --cell-size: min(7.1vw, 84px);
+    width: min(52vw, 470px);
   }
 
   .activity-actions {
@@ -549,7 +559,13 @@ button:active {
   }
 
   .shape-board {
-    --cell-size: min(16vw, 58px);
+    width: min(92vw, 360px);
+    padding: 0;
+  }
+
+  .puzzle-piece {
+    width: calc(clamp(36px, 10.4vw, 56px) * var(--piece-cols));
+    height: calc(clamp(36px, 10.4vw, 56px) * var(--piece-rows));
   }
 }
 

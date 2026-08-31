@@ -12,7 +12,7 @@
     <header class="app-header">
       <p class="eyebrow">Construccion visoespacial</p>
       <h1>Armar Figuras</h1>
-      <p class="tagline">Arrastra las fichas azules hasta completar la figura antes de que termine el tiempo.</p>
+      <p class="tagline">Arrastra las piezas azules hasta completar la figura antes de que termine el tiempo.</p>
       <div class="app-meta" aria-label="Informacion del juego">
         <span>Creador: Ing. Emanuel Bombina</span>
         <span>Version 1.0</span>
@@ -39,7 +39,7 @@
             </select>
           </div>
           <div>
-            <label for="pieceCount">Cantidad de fichas</label>
+            <label for="pieceCount">Cantidad de piezas</label>
             <input id="pieceCount" name="pieceCount" type="number" min="1" max="16" value="7" inputmode="numeric">
           </div>
           <div>
@@ -55,7 +55,7 @@
         <div class="difficulty-card" aria-live="polite">
           <span>Nivel detectado</span>
           <strong id="difficultyPreview">Intermedio</strong>
-          <p id="difficultyHint">De 5 a 10 fichas para armar.</p>
+          <p id="difficultyHint">De 5 a 10 piezas para armar.</p>
         </div>
         <p class="form-hint" id="setupHint">Configura el tiempo, la figura y la cantidad de fichas.</p>
 
@@ -89,13 +89,13 @@
 
       <div class="game-stage">
         <div class="stage-title">
-          <span id="roundLabel">Rombo con 7 fichas</span>
-          <strong id="objectiveText">Ubica todas las fichas en la silueta.</strong>
+          <span id="roundLabel">Rombo con 7 piezas</span>
+          <strong id="objectiveText">Encastra cada pieza en la silueta.</strong>
         </div>
 
         <div class="board-wrap">
           <div class="tile-bank-wrap">
-            <span class="section-label">Fichas</span>
+            <span class="section-label">Piezas</span>
             <div class="tile-bank" id="tileBank" aria-label="Fichas disponibles"></div>
           </div>
 
