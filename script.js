@@ -421,6 +421,9 @@ function renderBoard() {
     elements.shapeBoard.appendChild(slot);
   });
 
+  elements.shapeBoard.addEventListener("dragover", handleDragOver);
+  elements.shapeBoard.addEventListener("dragleave", handleDragLeave);
+  elements.shapeBoard.addEventListener("drop", handleDrop);
   shuffle(state.puzzle.pieces).forEach((piece) => {
     elements.tileBank.appendChild(createPieceTile(piece));
   });
@@ -633,7 +636,7 @@ function getDropTarget(clientX, clientY) {
   pointerDrag.tile.style.visibility = "hidden";
   const element = document.elementFromPoint(clientX, clientY);
   pointerDrag.tile.style.visibility = "";
-  return element ? element.closest(".piece-slot, .tile-bank") : null;
+  return element ? element.closest(".piece-slot, .shape-board, .tile-bank") : null;
 }
 
 function resetPointerTile(tile) {
@@ -647,8 +650,9 @@ function resetPointerTile(tile) {
 function updateHoveredSlot(clientX, clientY) {
   clearHoveredSlots();
   const target = getDropTarget(clientX, clientY);
-  if (target && target.classList.contains("piece-slot")) {
-    target.classList.add("is-hovered");
+  const slot = getTargetSlotForTile(pointerDrag.tile, target);
+  if (slot) {
+    slot.classList.add("is-hovered");
   }
 }
 
@@ -684,19 +688,33 @@ function placeTile(tile, target) {
 
   target.classList.remove("is-hovered");
 
-  if (target.classList.contains("piece-slot")) {
-    const oldTile = target.querySelector(".puzzle-piece");
+  if (target.classList.contains("piece-slot") || target.classList.contains("shape-board")) {
+    const correctSlot = getTargetSlotForTile(tile, target);
+    if (!correctSlot) {
+      return;
+    }
+
+    const oldTile = correctSlot.querySelector(".puzzle-piece");
     if (oldTile) {
       elements.tileBank.appendChild(oldTile);
       oldTile.classList.remove("is-placed");
     }
     tile.classList.add("is-placed");
-    target.appendChild(tile);
+    correctSlot.appendChild(tile);
     return;
   }
 
   tile.classList.remove("is-placed");
   elements.tileBank.appendChild(tile);
+}
+
+function getTargetSlotForTile(tile, target) {
+  if (!tile || !target || target.classList.contains("tile-bank")) {
+    return null;
+  }
+
+  const pieceId = tile.dataset.pieceId;
+  return elements.shapeBoard.querySelector(`.piece-slot[data-expected-id="${pieceId}"]`);
 }
 
 function clearSlots() {
