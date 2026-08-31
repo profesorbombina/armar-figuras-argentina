@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Armar Figuras Argentina: juego responsive para arrastrar fichas y completar figuras.">
+  <title>Armar Figuras Argentina</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <p class="eyebrow">Construccion visoespacial</p>
+      <h1>Armar Figuras</h1>
+      <p class="tagline">Arrastra las fichas azules hasta completar la figura antes de que termine el tiempo.</p>
+      <div class="app-meta" aria-label="Informacion del juego">
+        <span>Creador: Ing. Emanuel Bombina</span>
+        <span>Version 1.0</span>
+      </div>
+    </header>
+
+    <section class="setup-panel" id="setupPanel" aria-labelledby="setupTitle">
+      <div class="panel-heading">
+        <h2 id="setupTitle">Preparar actividad</h2>
+        <p class="record" id="recordText">Sin sesiones registradas en este navegador</p>
+      </div>
+
+      <form class="activity-form" id="activityForm">
+        <label for="participantName">Nombre del participante</label>
+        <input id="participantName" name="participantName" type="text" autocomplete="name" placeholder="Participante">
+
+        <div class="form-grid">
+          <div>
+            <label for="shapeType">Tipo de figura</label>
+            <select id="shapeType" name="shapeType">
+              <option value="rombo">Rombo</option>
+              <option value="cuadrado">Cuadrado</option>
+              <option value="triangulo">Triangulo</option>
+            </select>
+          </div>
+          <div>
+            <label for="pieceCount">Cantidad de fichas</label>
+            <input id="pieceCount" name="pieceCount" type="number" min="1" max="16" value="7" inputmode="numeric">
+          </div>
+          <div>
+            <label for="minutes">Minutos</label>
+            <input id="minutes" name="minutes" type="number" min="0" max="30" value="2" inputmode="numeric">
+          </div>
+          <div>
+            <label for="seconds">Segundos</label>
+            <input id="seconds" name="seconds" type="number" min="0" max="59" value="0" inputmode="numeric">
+          </div>
+        </div>
+
+        <div class="difficulty-card" aria-live="polite">
+          <span>Nivel detectado</span>
+          <strong id="difficultyPreview">Intermedio</strong>
+          <p id="difficultyHint">De 5 a 10 fichas para armar.</p>
+        </div>
+        <p class="form-hint" id="setupHint">Configura el tiempo, la figura y la cantidad de fichas.</p>
+
+        <button class="primary-button" type="submit">Iniciar actividad</button>
+      </form>
+    </section>
+
+    <section class="activity-panel hidden" id="activityPanel" aria-label="Juego de armar figuras">
+      <div class="activity-hud">
+        <div>
+          <span class="hud-label">Participante</span>
+          <strong id="nameText">Participante</strong>
+        </div>
+        <div>
+          <span class="hud-label">Tiempo</span>
+          <strong id="timerText">00:00</strong>
+        </div>
+        <div>
+          <span class="hud-label">Nivel</span>
+          <strong id="levelText">Intermedio</strong>
+        </div>
+        <div>
+          <span class="hud-label">Figura</span>
+          <strong id="shapeText">Rombo</strong>
+        </div>
+        <div>
+          <span class="hud-label">Intentos</span>
+          <strong id="attemptText">0</strong>
+        </div>
+      </div>
+
+      <div class="game-stage">
+        <div class="stage-title">
+          <span id="roundLabel">Rombo con 7 fichas</span>
+          <strong id="objectiveText">Ubica todas las fichas en la silueta.</strong>
+        </div>
+
+        <div class="board-wrap">
+          <div class="tile-bank-wrap">
+            <span class="section-label">Fichas</span>
+            <div class="tile-bank" id="tileBank" aria-label="Fichas disponibles"></div>
+          </div>
+
+          <div class="shape-area">
+            <span class="section-label">Figura objetivo</span>
+            <div class="shape-board" id="shapeBoard" aria-label="Silueta para ubicar fichas"></div>
+          </div>
+        </div>
+
+        <p class="action-feedback" id="actionFeedback">Arrastra con el dedo o clic izquierdo del mouse.</p>
+
+        <div class="activity-actions">
+          <button class="ghost-button" id="clearButton" type="button">Limpiar figura</button>
+          <button class="ghost-button" id="finishButton" type="button">Finalizar</button>
+          <button class="primary-button" id="checkButton" type="button">Revisar figura</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="results-panel hidden" id="resultsPanel" aria-labelledby="resultTitle">
+      <h2 id="resultTitle">Indicadores del juego</h2>
+      <p class="winner" id="summaryText"></p>
+      <div class="metrics-grid" id="metricsGrid"></div>
+      <button class="primary-button" id="playAgainButton" type="button">Nueva actividad</button>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
