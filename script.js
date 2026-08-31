@@ -394,7 +394,7 @@ function renderActivity() {
   elements.attemptText.textContent = `${state.attempts}`;
   elements.timerText.textContent = formatTime(getRemainingSeconds());
   elements.roundLabel.textContent = `${normalizeShapeName(state.shapeType)} con ${state.pieceCount} piezas`;
-  elements.objectiveText.textContent = "Encastra cada pieza en el hueco que completa la figura.";
+  elements.objectiveText.textContent = "Solta cada pieza dentro del lienzo para completar la figura.";
   renderBoard();
 }
 
@@ -414,7 +414,6 @@ function renderBoard() {
     slot.style.top = `${(piece.minRow / state.puzzle.size) * 100}%`;
     slot.style.width = `${(piece.width / state.puzzle.size) * 100}%`;
     slot.style.height = `${(piece.height / state.puzzle.size) * 100}%`;
-    slot.appendChild(createPieceSvg(piece, "slot"));
     slot.addEventListener("dragover", handleDragOver);
     slot.addEventListener("dragleave", handleDragLeave);
     slot.addEventListener("drop", handleDrop);
@@ -564,7 +563,9 @@ function startPointerDrag(event) {
     tile,
     pointerId: event.pointerId,
     offsetX: event.clientX - rect.left,
-    offsetY: event.clientY - rect.top
+    offsetY: event.clientY - rect.top,
+    clientX: event.clientX,
+    clientY: event.clientY
   };
 
   tile.setPointerCapture(event.pointerId);
@@ -583,6 +584,8 @@ function movePointerDrag(event) {
   }
 
   event.preventDefault();
+  pointerDrag.clientX = event.clientX;
+  pointerDrag.clientY = event.clientY;
   moveTileToPointer(event.clientX, event.clientY);
   updateHoveredSlot(event.clientX, event.clientY);
 }
@@ -597,7 +600,7 @@ function endPointerDrag(event) {
   const target = getDropTarget(event.clientX, event.clientY);
   resetPointerTile(drag.tile);
   pointerDrag = null;
-  placeTile(drag.tile, target);
+  placeTile(drag.tile, target, event.clientX, event.clientY);
   clearHoveredSlots();
   removePointerListeners();
 }
@@ -650,7 +653,7 @@ function resetPointerTile(tile) {
 function updateHoveredSlot(clientX, clientY) {
   clearHoveredSlots();
   const target = getDropTarget(clientX, clientY);
-  const slot = getTargetSlotForTile(pointerDrag.tile, target);
+  const slot = getDropSlot(target, clientX, clientY);
   if (slot) {
     slot.classList.add("is-hovered");
   }
@@ -664,6 +667,14 @@ function handleDragOver(event) {
   event.preventDefault();
   if (event.currentTarget.classList.contains("piece-slot")) {
     event.currentTarget.classList.add("is-hovered");
+    return;
+  }
+
+  if (event.currentTarget.classList.contains("shape-board")) {
+    const slot = getDropSlot(event.currentTarget, event.clientX, event.clientY);
+    if (slot) {
+      slot.classList.add("is-hovered");
+    }
   }
 }
 
@@ -677,11 +688,11 @@ function handleDrop(event) {
   const tile = document.getElementById(tileId);
 
   if (tile) {
-    placeTile(tile, event.currentTarget);
+    placeTile(tile, event.currentTarget, event.clientX, event.clientY);
   }
 }
 
-function placeTile(tile, target) {
+function placeTile(tile, target, clientX = null, clientY = null) {
   if (!target) {
     return;
   }
@@ -689,18 +700,18 @@ function placeTile(tile, target) {
   target.classList.remove("is-hovered");
 
   if (target.classList.contains("piece-slot") || target.classList.contains("shape-board")) {
-    const correctSlot = getTargetSlotForTile(tile, target);
-    if (!correctSlot) {
+    const dropSlot = getDropSlot(target, clientX, clientY);
+    if (!dropSlot) {
       return;
     }
 
-    const oldTile = correctSlot.querySelector(".puzzle-piece");
+    const oldTile = dropSlot.querySelector(".puzzle-piece");
     if (oldTile) {
       elements.tileBank.appendChild(oldTile);
       oldTile.classList.remove("is-placed");
     }
     tile.classList.add("is-placed");
-    correctSlot.appendChild(tile);
+    dropSlot.appendChild(tile);
     return;
   }
 
@@ -708,13 +719,34 @@ function placeTile(tile, target) {
   elements.tileBank.appendChild(tile);
 }
 
-function getTargetSlotForTile(tile, target) {
-  if (!tile || !target || target.classList.contains("tile-bank")) {
+function getDropSlot(target, clientX, clientY) {
+  if (!target || target.classList.contains("tile-bank")) {
     return null;
   }
 
-  const pieceId = tile.dataset.pieceId;
-  return elements.shapeBoard.querySelector(`.piece-slot[data-expected-id="${pieceId}"]`);
+  if (target.classList.contains("piece-slot")) {
+    return target;
+  }
+
+  const slots = [...elements.shapeBoard.querySelectorAll(".piece-slot")];
+  const emptySlots = slots.filter((slot) => !slot.querySelector(".puzzle-piece"));
+  const candidateSlots = emptySlots.length ? emptySlots : slots;
+
+  if (clientX === null || clientY === null) {
+    return candidateSlots[0] || null;
+  }
+
+  return candidateSlots
+    .map((slot) => {
+      const rect = slot.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      return {
+        slot,
+        distance: Math.hypot(centerX - clientX, centerY - clientY)
+      };
+    })
+    .sort((first, second) => first.distance - second.distance)[0]?.slot || null;
 }
 
 function clearSlots() {
