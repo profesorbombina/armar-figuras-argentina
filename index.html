@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Armar Figuras Argentina: juego responsive para arrastrar fichas y completar figuras.">
+  <meta name="description" content="Armar Figuras Argentina: juego responsive para arrastrar piezas y completar figuras.">
   <title>Armar Figuras Argentina</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -57,7 +57,7 @@
           <strong id="difficultyPreview">Intermedio</strong>
           <p id="difficultyHint">De 5 a 10 piezas para armar.</p>
         </div>
-        <p class="form-hint" id="setupHint">Configura el tiempo, la figura y la cantidad de fichas.</p>
+        <p class="form-hint" id="setupHint">Configura el tiempo, la figura y la cantidad de piezas.</p>
 
         <button class="primary-button" type="submit">Iniciar actividad</button>
       </form>
@@ -82,7 +82,7 @@
           <strong id="shapeText">Rombo</strong>
         </div>
         <div>
-          <span class="hud-label">Intentos</span>
+          <span class="hud-label">Movimientos</span>
           <strong id="attemptText">0</strong>
         </div>
       </div>
@@ -90,18 +90,18 @@
       <div class="game-stage">
         <div class="stage-title">
           <span id="roundLabel">Rombo con 7 piezas</span>
-          <strong id="objectiveText">Encastra cada pieza en la silueta.</strong>
+          <strong id="objectiveText">Solta cada pieza dentro del lienzo para completar la figura.</strong>
         </div>
 
         <div class="board-wrap">
           <div class="tile-bank-wrap">
             <span class="section-label">Piezas</span>
-            <div class="tile-bank" id="tileBank" aria-label="Fichas disponibles"></div>
+            <div class="tile-bank" id="tileBank" aria-label="Piezas disponibles"></div>
           </div>
 
           <div class="shape-area">
             <span class="section-label">Figura objetivo</span>
-            <div class="shape-board" id="shapeBoard" aria-label="Silueta para ubicar fichas"></div>
+            <div class="shape-board" id="shapeBoard" aria-label="Lienzo para ubicar piezas"></div>
           </div>
         </div>
 

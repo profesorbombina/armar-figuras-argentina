@@ -43,6 +43,7 @@ const state = {
   timerId: null,
   isRunning: false,
   attempts: 0,
+  movements: 0,
   checksBeforeComplete: 0,
   completedAt: null,
   puzzle: null
@@ -366,6 +367,7 @@ function resetActivity(settings = {}) {
     timerId: null,
     isRunning: false,
     attempts: 0,
+    movements: 0,
     checksBeforeComplete: 0,
     completedAt: null,
     puzzle: settings.puzzle || createPuzzle("rombo", 7)
@@ -391,7 +393,7 @@ function renderActivity() {
   elements.nameText.textContent = state.participantName;
   elements.levelText.textContent = state.level;
   elements.shapeText.textContent = normalizeShapeName(state.shapeType);
-  elements.attemptText.textContent = `${state.attempts}`;
+  elements.attemptText.textContent = `${state.movements}`;
   elements.timerText.textContent = formatTime(getRemainingSeconds());
   elements.roundLabel.textContent = `${normalizeShapeName(state.shapeType)} con ${state.pieceCount} piezas`;
   elements.objectiveText.textContent = "Solta cada pieza dentro del lienzo para completar la figura.";
@@ -414,9 +416,6 @@ function renderBoard() {
     slot.style.top = `${(piece.minRow / state.puzzle.size) * 100}%`;
     slot.style.width = `${(piece.width / state.puzzle.size) * 100}%`;
     slot.style.height = `${(piece.height / state.puzzle.size) * 100}%`;
-    slot.addEventListener("dragover", handleDragOver);
-    slot.addEventListener("dragleave", handleDragLeave);
-    slot.addEventListener("drop", handleDrop);
     elements.shapeBoard.appendChild(slot);
   });
 
@@ -484,6 +483,8 @@ function createPieceTile(piece) {
   tile.type = "button";
   tile.draggable = false;
   tile.dataset.pieceId = piece.id;
+  tile.dataset.homeRow = String(piece.minRow);
+  tile.dataset.homeCol = String(piece.minCol);
   tile.id = `${piece.id}-${crypto.randomUUID()}`;
   tile.style.setProperty("--piece-cols", piece.width);
   tile.style.setProperty("--piece-rows", piece.height);
@@ -565,7 +566,10 @@ function startPointerDrag(event) {
     offsetX: event.clientX - rect.left,
     offsetY: event.clientY - rect.top,
     clientX: event.clientX,
-    clientY: event.clientY
+    clientY: event.clientY,
+    startedOnBoard: tile.classList.contains("is-on-board"),
+    startRow: tile.dataset.row || "",
+    startCol: tile.dataset.col || ""
   };
 
   tile.setPointerCapture(event.pointerId);
@@ -600,7 +604,7 @@ function endPointerDrag(event) {
   const target = getDropTarget(event.clientX, event.clientY);
   resetPointerTile(drag.tile);
   pointerDrag = null;
-  placeTile(drag.tile, target, event.clientX, event.clientY);
+  placeTile(drag.tile, target, event.clientX, event.clientY, drag);
   clearHoveredSlots();
   removePointerListeners();
 }
@@ -639,7 +643,7 @@ function getDropTarget(clientX, clientY) {
   pointerDrag.tile.style.visibility = "hidden";
   const element = document.elementFromPoint(clientX, clientY);
   pointerDrag.tile.style.visibility = "";
-  return element ? element.closest(".piece-slot, .shape-board, .tile-bank") : null;
+  return element ? element.closest(".shape-board, .tile-bank") : null;
 }
 
 function resetPointerTile(tile) {
@@ -653,28 +657,19 @@ function resetPointerTile(tile) {
 function updateHoveredSlot(clientX, clientY) {
   clearHoveredSlots();
   const target = getDropTarget(clientX, clientY);
-  const slot = getDropSlot(target, clientX, clientY);
-  if (slot) {
-    slot.classList.add("is-hovered");
+  if (target && target.classList.contains("shape-board")) {
+    target.classList.add("is-hovered");
   }
 }
 
 function clearHoveredSlots() {
-  document.querySelectorAll(".piece-slot.is-hovered").forEach((slot) => slot.classList.remove("is-hovered"));
+  elements.shapeBoard.classList.remove("is-hovered");
 }
 
 function handleDragOver(event) {
   event.preventDefault();
-  if (event.currentTarget.classList.contains("piece-slot")) {
-    event.currentTarget.classList.add("is-hovered");
-    return;
-  }
-
   if (event.currentTarget.classList.contains("shape-board")) {
-    const slot = getDropSlot(event.currentTarget, event.clientX, event.clientY);
-    if (slot) {
-      slot.classList.add("is-hovered");
-    }
+    event.currentTarget.classList.add("is-hovered");
   }
 }
 
@@ -692,77 +687,157 @@ function handleDrop(event) {
   }
 }
 
-function placeTile(tile, target, clientX = null, clientY = null) {
+function placeTile(tile, target, clientX = null, clientY = null, drag = null) {
   if (!target) {
     return;
   }
 
   target.classList.remove("is-hovered");
 
-  if (target.classList.contains("piece-slot") || target.classList.contains("shape-board")) {
-    const dropSlot = getDropSlot(target, clientX, clientY);
-    if (!dropSlot) {
+  if (target.classList.contains("shape-board")) {
+    const placement = getBoardPlacement(tile, clientX, clientY, drag);
+    if (!placement) {
       return;
     }
 
-    const oldTile = dropSlot.querySelector(".puzzle-piece");
-    if (oldTile) {
-      elements.tileBank.appendChild(oldTile);
-      oldTile.classList.remove("is-placed");
-    }
+    moveOverlappingPiecesToBank(tile, placement);
     tile.classList.add("is-placed");
-    dropSlot.appendChild(tile);
+    tile.classList.add("is-on-board");
+    tile.dataset.row = String(placement.row);
+    tile.dataset.col = String(placement.col);
+    tile.style.setProperty("--piece-left", `${(placement.col / state.puzzle.size) * 100}%`);
+    tile.style.setProperty("--piece-top", `${(placement.row / state.puzzle.size) * 100}%`);
+    elements.shapeBoard.appendChild(tile);
+    countMoveIfChanged(tile, drag, "board");
     return;
   }
 
   tile.classList.remove("is-placed");
+  tile.classList.remove("is-on-board");
+  tile.style.removeProperty("--piece-left");
+  tile.style.removeProperty("--piece-top");
+  delete tile.dataset.row;
+  delete tile.dataset.col;
   elements.tileBank.appendChild(tile);
+  countMoveIfChanged(tile, drag, "bank");
 }
 
-function getDropSlot(target, clientX, clientY) {
-  if (!target || target.classList.contains("tile-bank")) {
+function getBoardPlacement(tile, clientX, clientY, drag) {
+  const piece = getPieceById(tile.dataset.pieceId);
+  if (!piece) {
     return null;
   }
 
-  if (target.classList.contains("piece-slot")) {
-    return target;
+  const boardRect = elements.shapeBoard.getBoundingClientRect();
+  const cellSize = boardRect.width / state.puzzle.size;
+  const offsetX = drag ? drag.offsetX : tile.getBoundingClientRect().width / 2;
+  const offsetY = drag ? drag.offsetY : tile.getBoundingClientRect().height / 2;
+  const desiredCol = Math.round((clientX - boardRect.left - offsetX) / cellSize);
+  const desiredRow = Math.round((clientY - boardRect.top - offsetY) / cellSize);
+  const validOrigins = getValidOrigins(piece);
+
+  return validOrigins
+    .map((origin) => ({
+      ...origin,
+      distance: Math.hypot(origin.col - desiredCol, origin.row - desiredRow)
+    }))
+    .sort((first, second) => first.distance - second.distance)[0] || null;
+}
+
+function getValidOrigins(piece) {
+  const shapeCellKeys = new Set(state.puzzle.cells.map(cellKey));
+  const origins = [];
+
+  for (let row = 0; row <= state.puzzle.size - piece.height; row += 1) {
+    for (let col = 0; col <= state.puzzle.size - piece.width; col += 1) {
+      const fits = piece.cells.every((cell) => {
+        const relativeRow = cell.row - piece.minRow;
+        const relativeCol = cell.col - piece.minCol;
+        return shapeCellKeys.has(`${row + relativeRow}-${col + relativeCol}`);
+      });
+
+      if (fits) {
+        origins.push({ row, col });
+      }
+    }
   }
 
-  const slots = [...elements.shapeBoard.querySelectorAll(".piece-slot")];
-  const emptySlots = slots.filter((slot) => !slot.querySelector(".puzzle-piece"));
-  const candidateSlots = emptySlots.length ? emptySlots : slots;
+  return origins;
+}
 
-  if (clientX === null || clientY === null) {
-    return candidateSlots[0] || null;
+function moveOverlappingPiecesToBank(activeTile, placement) {
+  const activePiece = getPieceById(activeTile.dataset.pieceId);
+  const activeCells = getPlacedCellKeys(activePiece, placement.row, placement.col);
+
+  [...elements.shapeBoard.querySelectorAll(".puzzle-piece.is-on-board")].forEach((tile) => {
+    if (tile === activeTile) {
+      return;
+    }
+
+    const piece = getPieceById(tile.dataset.pieceId);
+    const occupiedCells = getPlacedCellKeys(piece, Number(tile.dataset.row), Number(tile.dataset.col));
+    const hasOverlap = occupiedCells.some((cell) => activeCells.includes(cell));
+
+    if (hasOverlap) {
+      tile.classList.remove("is-placed");
+      tile.classList.remove("is-on-board");
+      tile.style.removeProperty("--piece-left");
+      tile.style.removeProperty("--piece-top");
+      delete tile.dataset.row;
+      delete tile.dataset.col;
+      elements.tileBank.appendChild(tile);
+    }
+  });
+}
+
+function getPlacedCellKeys(piece, row, col) {
+  return piece.cells.map((cell) => {
+    const relativeRow = cell.row - piece.minRow;
+    const relativeCol = cell.col - piece.minCol;
+    return `${row + relativeRow}-${col + relativeCol}`;
+  });
+}
+
+function getPieceById(pieceId) {
+  return state.puzzle.pieces.find((piece) => piece.id === pieceId);
+}
+
+function countMoveIfChanged(tile, drag, destination) {
+  const movedToBoard = destination === "board";
+  const startWasBoard = drag ? drag.startedOnBoard : tile.classList.contains("is-on-board");
+  const rowChanged = !drag || drag.startRow !== (tile.dataset.row || "");
+  const colChanged = !drag || drag.startCol !== (tile.dataset.col || "");
+  const destinationChanged = startWasBoard !== movedToBoard;
+
+  if (destinationChanged || rowChanged || colChanged) {
+    state.movements += 1;
+    elements.attemptText.textContent = `${state.movements}`;
   }
-
-  return candidateSlots
-    .map((slot) => {
-      const rect = slot.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      return {
-        slot,
-        distance: Math.hypot(centerX - clientX, centerY - clientY)
-      };
-    })
-    .sort((first, second) => first.distance - second.distance)[0]?.slot || null;
 }
 
 function clearSlots() {
-  [...elements.shapeBoard.querySelectorAll(".piece-slot .puzzle-piece")].forEach((tile) => {
+  [...elements.shapeBoard.querySelectorAll(".puzzle-piece.is-on-board")].forEach((tile) => {
     tile.classList.remove("is-placed");
+    tile.classList.remove("is-on-board");
+    tile.style.removeProperty("--piece-left");
+    tile.style.removeProperty("--piece-top");
+    delete tile.dataset.row;
+    delete tile.dataset.col;
     elements.tileBank.appendChild(tile);
   });
   showActionFeedback("Figura limpia. Volve a encastrar las piezas.", false, true);
 }
 
 function getPlacedPieces() {
-  return [...elements.shapeBoard.querySelectorAll(".piece-slot")].map((slot) => {
-    const tile = slot.querySelector(".puzzle-piece");
+  return state.puzzle.pieces.map((piece) => {
+    const tile = elements.shapeBoard.querySelector(`.puzzle-piece.is-on-board[data-piece-id="${piece.id}"]`);
     return {
-      expectedId: slot.dataset.expectedId,
-      pieceId: tile ? tile.dataset.pieceId : null
+      expectedId: piece.id,
+      pieceId: tile ? tile.dataset.pieceId : null,
+      row: tile ? Number(tile.dataset.row) : null,
+      col: tile ? Number(tile.dataset.col) : null,
+      expectedRow: piece.minRow,
+      expectedCol: piece.minCol
     };
   });
 }
@@ -773,15 +848,19 @@ function checkCurrentFigure() {
   }
 
   state.attempts += 1;
-  elements.attemptText.textContent = `${state.attempts}`;
+  elements.attemptText.textContent = `${state.movements}`;
 
   const placedPieces = getPlacedPieces();
   const placedCount = placedPieces.filter((piece) => piece.pieceId).length;
-  const correctCount = placedPieces.filter((piece) => piece.pieceId && piece.pieceId === piece.expectedId).length;
+  const correctCount = placedPieces.filter((piece) => (
+    piece.pieceId === piece.expectedId &&
+    piece.row === piece.expectedRow &&
+    piece.col === piece.expectedCol
+  )).length;
 
   if (correctCount === state.pieceCount) {
     state.completedAt = performance.now();
-    showActionFeedback("Figura completa. Todas las piezas encastran.", true);
+    showActionFeedback("Figura completa. Todas las piezas encastran perfecto.", true);
     playSuccessSound();
     window.setTimeout(() => finishActivity("completed"), 650);
     return;
@@ -792,7 +871,7 @@ function checkCurrentFigure() {
   if (placedCount < state.pieceCount) {
     showActionFeedback(`Faltan ${state.pieceCount - placedCount} piezas por encastrar.`, false);
   } else {
-    showActionFeedback(`Hay ${correctCount} de ${state.pieceCount} piezas en el hueco correcto.`, false);
+    showActionFeedback(`Hay ${correctCount} de ${state.pieceCount} piezas en la posicion correcta.`, false);
   }
 
   playErrorSound();
@@ -814,7 +893,11 @@ function finishActivity(reason) {
 function calculateMetrics(reason) {
   const placedPieces = getPlacedPieces();
   const placedCount = placedPieces.filter((piece) => piece.pieceId).length;
-  const correctCount = placedPieces.filter((piece) => piece.pieceId && piece.pieceId === piece.expectedId).length;
+  const correctCount = placedPieces.filter((piece) => (
+    piece.pieceId === piece.expectedId &&
+    piece.row === piece.expectedRow &&
+    piece.col === piece.expectedCol
+  )).length;
   const elapsedSeconds = Math.min(
     state.durationSeconds,
     Math.max(0, ((state.completedAt || performance.now()) - state.startedAt) / 1000)
@@ -828,6 +911,7 @@ function calculateMetrics(reason) {
     placedCount,
     correctCount,
     pending: Math.max(0, state.pieceCount - placedCount),
+    movements: state.movements,
     attempts: state.attempts,
     checksBeforeComplete: state.checksBeforeComplete,
     accuracy: state.pieceCount === 0 ? 0 : (correctCount / state.pieceCount) * 100,
@@ -854,6 +938,7 @@ function renderResults(metrics) {
     ["Piezas ubicadas", `${metrics.placedCount}`],
     ["Piezas correctas", `${metrics.correctCount}`],
     ["Pendientes", `${metrics.pending}`],
+    ["Movimientos", `${metrics.movements}`],
     ["Intentos de revision", `${metrics.attempts}`],
     ["Revisiones antes de completar", `${metrics.checksBeforeComplete}`],
     ["Precision final", `${metrics.accuracy.toFixed(1)}%`],

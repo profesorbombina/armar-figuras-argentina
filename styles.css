@@ -340,6 +340,11 @@ button:active {
   border: 0;
   background: rgba(255, 255, 255, 0.28);
   box-shadow: none;
+  overflow: hidden;
+}
+
+.shape-board.is-hovered {
+  filter: drop-shadow(0 0 10px rgba(53, 174, 232, 0.58));
 }
 
 .silhouette-svg {
@@ -353,14 +358,9 @@ button:active {
 
 .piece-slot {
   position: absolute;
-  display: grid;
-  place-items: stretch;
   border: 0;
-  color: transparent;
-}
-
-.piece-slot.is-hovered {
-  filter: drop-shadow(0 0 10px rgba(53, 174, 232, 0.58));
+  background: transparent;
+  pointer-events: none;
 }
 
 .puzzle-piece {
@@ -378,10 +378,14 @@ button:active {
   filter: drop-shadow(0 10px 15px rgba(7, 21, 38, 0.22));
 }
 
-.piece-slot .puzzle-piece {
-  width: 100%;
-  height: 100%;
+.shape-board > .puzzle-piece {
+  position: absolute;
+  left: var(--piece-left);
+  top: var(--piece-top);
+  width: calc((100% / var(--puzzle-size)) * var(--piece-cols));
+  height: calc((100% / var(--puzzle-size)) * var(--piece-rows));
   filter: none;
+  z-index: 2;
 }
 
 .puzzle-piece:active {
@@ -401,21 +405,6 @@ button:active {
   width: 100%;
   height: 100%;
   overflow: visible;
-}
-
-.piece-svg-slot .piece-cell {
-  fill: rgba(255, 255, 255, 0.46);
-  stroke: rgba(17, 22, 32, 0.18);
-  stroke-width: 0.03;
-}
-
-.piece-svg-slot .piece-outline {
-  fill: none;
-  stroke: rgba(17, 22, 32, 0.32);
-  stroke-dasharray: 0.12 0.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 0.08;
 }
 
 .piece-svg-tile .piece-cell {
